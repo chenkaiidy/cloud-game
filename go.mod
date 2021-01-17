@@ -25,6 +25,7 @@ require (
 	github.com/prometheus/client_golang v1.9.0
 	github.com/spf13/pflag v1.0.5
 	github.com/veandco/go-sdl2 v0.4.5
+	github.com/zaf/resample v0.0.0-20200305235742-54008d320155
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/image v0.0.0-20201208152932-35266b937fa6
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect

@@ -13,6 +13,7 @@ type Encoder struct {
 	inFrequency     int
 	outFrequency    int
 	resampleBufSize int
+	resampler       Resampler
 }
 
 func NewEncoder(inputSampleRate, outputSampleRate, channels int, options ...func(*Encoder) error) (Encoder, error) {
@@ -31,6 +32,9 @@ func NewEncoder(inputSampleRate, outputSampleRate, channels int, options ...func
 		channels:     channels,
 		inFrequency:  inputSampleRate,
 		outFrequency: outputSampleRate,
+		resampler:    &Giongto35LinearResampler{},
+		//resampler: &SoxResampler{
+		//},
 	}
 
 	_ = enc.SetMaxBandwidth(opus.Fullband)
@@ -51,6 +55,10 @@ func SampleBuffer(ms int, resampling bool) func(*Encoder) error {
 		e.buffer = Buffer{Data: make([]int16, e.inFrequency*ms/1000*e.channels)}
 		if resampling {
 			e.resampleBufSize = e.outFrequency * ms / 1000 * e.channels
+			//err := e.resampler.Init(e.inFrequency, e.outFrequency)
+			//if err != nil {
+			//	return err
+			//}
 		}
 		return
 	}
@@ -64,8 +72,25 @@ func (e *Encoder) BufferFull() bool { return e.buffer.Full() }
 
 func (e *Encoder) Encode(pcm []int16) ([]byte, error) {
 	if e.resampleBufSize > 0 {
-		pcm = resampleFn(pcm, e.resampleBufSize)
+		err := e.resampler.Init(e.inFrequency, e.outFrequency)
+		if err != nil {
+			return nil, err
+		}
+		pcm = e.resampler.Resample(pcm, e.resampleBufSize)
+		err = e.resampler.Close()
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	if len(pcm) < e.resampleBufSize {
+		gap := make([]int16, e.resampleBufSize-len(pcm))
+		for i := range gap {
+			gap[i] = pcm[len(pcm)-1]
+		}
+		pcm = append(pcm, gap...)
+	}
+
 	data := make([]byte, 1024)
 	n, err := e.Encoder.Encode(pcm, data)
 	if err != nil {
@@ -88,26 +113,8 @@ func (e *Encoder) GetInfo() string {
 	)
 }
 
-// resampleFn does a simple linear interpolation of audio samples.
-func resampleFn(pcm []int16, size int) []int16 {
-	r, l, audio := make([]int16, size/2), make([]int16, size/2), make([]int16, size)
-	// ratio is basically the destination sample rate
-	// divided by the origin sample rate (i.e. 48000/44100)
-	ratio := float32(size) / float32(len(pcm))
-	for i, n := 0, len(pcm)-1; i < n; i += 2 {
-		idx := int(float32(i/2) * ratio)
-		r[idx], l[idx] = pcm[i], pcm[i+1]
-	}
-	for i, n := 1, len(r); i < n; i++ {
-		if r[i] == 0 {
-			r[i] = r[i-1]
-		}
-		if l[i] == 0 {
-			l[i] = l[i-1]
-		}
-	}
-	for i := 0; i < size-1; i += 2 {
-		audio[i], audio[i+1] = r[i/2], l[i/2]
-	}
-	return audio
+// Close cleanups external resources for encoders.
+// ! OPUS lib wrapper doesn't have proper close function.
+func (e *Encoder) Close() {
+	_ = e.resampler.Close()
 }

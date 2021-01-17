@@ -52,7 +52,11 @@ func (r *Room) startAudio(sampleRate int, audio encoderConfig.Audio) {
 		for i := 0; i < len(samples); {
 			// we access the internal buffer in order to
 			// send a valid OPUS chunk ASAP
-			i += sound.BufferWrite(samples[i:])
+			smpl := samples[i:]
+			//for i, s := range smpl {
+			//	smpl[i] = int16(float32(s) * 0.9)
+			//}
+			i += sound.BufferWrite(smpl)
 			if sound.BufferFull() {
 				data, err := sound.BufferEncode()
 				if err != nil {
